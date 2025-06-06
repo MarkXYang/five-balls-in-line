@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/images">
+        <file alias="blue_ball.png">files/images/blue_ball.png</file>
+        <file alias="brown_ball.png">files/images/brown_ball.png</file>
+        <file alias="green_ball.png">files/images/green_ball.png</file>
+        <file alias="pink_ball.png">files/images/pink_ball.png</file>
+        <file alias="purple_ball.png">files/images/purple_ball.png</file>
+        <file alias="red_ball.png">files/images/red_ball.png</file>
+        <file alias="turquoise_ball.png">files/images/turquoise_ball.png</file>
+        <file alias="yellow_ball.png">files/images/yellow_ball.png</file>
+        <file alias="background_empty.png">files/images/background_empty.png</file>
+        <file alias="background_hover.png">files/images/background_hover.png</file>
+        <file alias="background_selected.png">files/images/background_selected.png</file>
+    </qresource>
+</RCC>

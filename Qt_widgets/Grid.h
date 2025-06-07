@@ -1,35 +1,43 @@
+// Qt_widgets/Grid.h
 #ifndef GRID_H
 #define GRID_H
 
+#include "Ball.h" // Ball is used directly in gridData
 #include <QVector>
+#include <QList>   // For m_emptyCells
 #include <QPoint>
 #include <QStringList>
-#include "Ball.h" // Assuming Ball.h is in the same directory
+#include <QRandomGenerator> // Required for placeRandomBall
 
 class Grid {
 public:
-    static const int GRID_SIZE = 9;
-
     Grid();
-    ~Grid(); // Destructor to clean up Ball objects
+    ~Grid();
 
     void initializeGrid();
     Ball* getBallAt(int x, int y) const;
     bool isCellEmpty(int x, int y) const;
-    bool placeBall(int x, int y, Ball* ball);
-    Ball* removeBall(int x, int y);
-    QList<QPoint> getEmptyCells() const;
-    QPoint placeRandomBall(const QString& color); // Returns QPoint of placement or (-1,-1)
+    bool placeBall(int x, int y, Ball* ball); // Will update m_emptyCells
+    Ball* removeBall(int x, int y);           // Will update m_emptyCells
+    QList<QPoint> getEmptyCells() const;      // Will return m_emptyCells
+    QPoint placeRandomBall(const QString& color); // Will use m_emptyCells
+
     void placeInitialBalls(int count);
-    QString getRandomColor() const;
     int getGridSize() const;
-    int getBallCount() const; // Useful for game logic/scoring
-    QStringList getAvailableColors() const; // Getter for available colors
+    int getBallCount() const;
+    QStringList getAvailableColors() const;
+
+
+    // Public constant for grid size
+    static const int GRID_SIZE = 9;
 
 private:
     QVector<QVector<Ball*>> m_gridData;
-    int m_currentMaxBallId = 0; // To generate unique IDs for balls
     QStringList m_availableColors;
+    int m_currentMaxBallId;
+    QList<QPoint> m_emptyCells; // Stores the coordinates of all empty cells
+
+    QString getRandomColor() const;
 };
 
 #endif // GRID_H

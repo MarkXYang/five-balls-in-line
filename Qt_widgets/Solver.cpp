@@ -1,12 +1,39 @@
+// Qt_widgets/Solver.cpp
 #include "Solver.h"
-#include "Ball.h"   // Needed for ball->getColor()
-#include "Grid.h"   // Needed for m_grid->getBallAt() and Grid::GRID_SIZE
-#include "qtpoint_hash.h" // For qHash(QPoint)
-#include <QSet>     // QSet is used for ballsInLinesSet
-#include <QDebug>   // For optional debugging
+#include "Ball.h"
+#include "Grid.h"
+#include "qtpoint_hash.h" // For QSet<QPoint>
+#include <QSet>
+#include <QDebug> // For optional debugging
 
 Solver::Solver(Grid* grid) : m_grid(grid) {
     Q_ASSERT(m_grid != nullptr);
+}
+
+// New: Scans in a single specified direction (dx, dy) from (startX, startY)
+// for balls of the specified color. Includes the starting ball.
+QList<QPoint> Solver::scanLineDirectional(int startX, int startY, int dx, int dy, const QString& color) {
+    QList<QPoint> linePoints;
+
+    // The starting ball (startX, startY) is the reference point.
+    // Its color is `color`. It's always included.
+    linePoints.append(QPoint(startX, startY));
+
+    int currentX = startX + dx;
+    int currentY = startY + dy;
+
+    while (currentX >= 0 && currentX < Grid::GRID_SIZE &&
+           currentY >= 0 && currentY < Grid::GRID_SIZE) {
+        Ball* ball = m_grid->getBallAt(currentX, currentY);
+        if (ball && ball->getColor() == color) {
+            linePoints.append(QPoint(currentX, currentY));
+            currentX += dx;
+            currentY += dy;
+        } else {
+            break; // End of line in this direction
+        }
+    }
+    return linePoints;
 }
 
 QList<QPoint> Solver::checkForLines(int lastMovedX, int lastMovedY) {
@@ -22,70 +49,43 @@ QList<QPoint> Solver::checkForLines(int lastMovedX, int lastMovedY) {
     QString color = movedBall->getColor();
     QSet<QPoint> ballsInLinesSet; // Use QSet<QPoint> to store unique points
 
-    // Define direction vectors for horizontal, vertical, and two diagonals
-    QList<QPair<int, int>> directions;
-    directions << QPair<int, int>(1, 0);  // Horizontal
-    directions << QPair<int, int>(0, 1);  // Vertical
-    directions << QPair<int, int>(1, 1);  // Diagonal (top-left to bottom-right)
-    directions << QPair<int, int>(1, -1); // Diagonal (bottom-left to top-right)
+    // Define primary axes directions. For each axis, we scan in both positive and negative directions.
+    QList<QPair<int, int>> axes;
+    axes << QPair<int, int>(1, 0);  // Horizontal axis
+    axes << QPair<int, int>(0, 1);  // Vertical axis
+    axes << QPair<int, int>(1, 1);  // Diagonal (top-left to bottom-right)
+    axes << QPair<int, int>(1, -1); // Diagonal (bottom-left to top-right)
 
-    for (const auto& dir : directions) {
-        QList<QPoint> linePoints = scanLine(lastMovedX, lastMovedY, dir.first, dir.second, color);
-        if (linePoints.size() >= 5) {
-            for (const QPoint& p : linePoints) {
+    for (const auto& axis : axes) {
+        int dx = axis.first;
+        int dy = axis.second;
+
+        // Scan in the "positive" direction along the axis (dx, dy)
+        // This list includes (lastMovedX, lastMovedY) as its first element.
+        QList<QPoint> linePart1 = scanLineDirectional(lastMovedX, lastMovedY, dx, dy, color);
+
+        // Scan in the "negative" direction along the axis (-dx, -dy)
+        // This list also includes (lastMovedX, lastMovedY) as its first element.
+        QList<QPoint> linePart2 = scanLineDirectional(lastMovedX, lastMovedY, -dx, -dy, color);
+
+        // Combine the two parts.
+        // (lastMovedX, lastMovedY) is present in both linePart1 and linePart2.
+        // So, the total length of the line along this axis is linePart1.size() + linePart2.size() - 1.
+        if ((linePart1.size() + linePart2.size() - 1) >= 5) {
+            // Add all unique points from both parts to the set.
+            // QSet handles uniqueness automatically.
+            for (const QPoint& p : linePart1) {
+                ballsInLinesSet.insert(p);
+            }
+            for (const QPoint& p : linePart2) {
                 ballsInLinesSet.insert(p);
             }
         }
     }
 
+    // Convert the set of points to a QList to return
+    if (ballsInLinesSet.isEmpty()) {
+        return QList<QPoint>();
+    }
     return QList<QPoint>(ballsInLinesSet.begin(), ballsInLinesSet.end());
-}
-
-QList<QPoint> Solver::scanLine(int startX, int startY, int dx, int dy, const QString& color) {
-    QList<QPoint> currentLinePoints;
-
-    // Add the starting ball's position
-    currentLinePoints.append(QPoint(startX, startY));
-
-    // Scan in the positive direction (dx, dy)
-    int currentX = startX + dx;
-    int currentY = startY + dy;
-    while (currentX >= 0 && currentX < Grid::GRID_SIZE &&
-           currentY >= 0 && currentY < Grid::GRID_SIZE) {
-        Ball* ball = m_grid->getBallAt(currentX, currentY);
-        if (ball && ball->getColor() == color) {
-            currentLinePoints.append(QPoint(currentX, currentY));
-            currentX += dx;
-            currentY += dy;
-        } else {
-            break; // End of line in this direction
-        }
-    }
-
-    // Scan in the negative direction (-dx, -dy)
-    currentX = startX - dx;
-    currentY = startY - dy;
-    while (currentX >= 0 && currentX < Grid::GRID_SIZE &&
-           currentY >= 0 && currentY < Grid::GRID_SIZE) {
-        Ball* ball = m_grid->getBallAt(currentX, currentY);
-        if (ball && ball->getColor() == color) {
-            currentLinePoints.append(QPoint(currentX, currentY)); // Add to the list
-            currentX -= dx;
-            currentY -= dy;
-        } else {
-            break; // End of line in this direction
-        }
-    }
-
-    // No need to check size here, checkForLines will do it.
-    // This helper just returns all balls of the same color along the axis.
-    // The actual check for >=5 is done in checkForLines after getting results from scanLine.
-    // Correction: The problem description for checkLine (now scanLine) implies it should check size.
-    // Let's stick to that: if line.size >= 5, return line, else empty.
-    // This means checkForLines will directly add to ballsInLinesSet if scanLine returns non-empty.
-
-    if (currentLinePoints.size() >= 5) {
-        return currentLinePoints;
-    }
-    return QList<QPoint>(); // Return empty list if not 5 or more
 }

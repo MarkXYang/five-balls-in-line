@@ -20,7 +20,8 @@ Grid::~Grid() {
 }
 
 void Grid::initializeGrid() {
-    m_availableColors << "red" << "green" << "blue" << "yellow" << "purple" << "orange" << "cyan";
+    m_availableColors.clear(); // Good practice if initializeGrid can be called multiple times
+    m_availableColors << "red" << "green" << "blue" << "yellow" << "purple" << "brown" << "pink" << "turquoise";
 
     m_gridData.resize(GRID_SIZE);
     m_emptyCells.clear(); // Clear before repopulating

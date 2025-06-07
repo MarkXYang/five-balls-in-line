@@ -26,6 +26,7 @@ public:
     int getGridSize() const;
     int getBallCount() const;
     QStringList getAvailableColors() const;
+    QString getRandomColor() const; // Moved from private to public
 
 
     // Public constant for grid size
@@ -36,8 +37,6 @@ private:
     QStringList m_availableColors;
     int m_currentMaxBallId;
     QList<QPoint> m_emptyCells; // Stores the coordinates of all empty cells
-
-    QString getRandomColor() const;
 };
 
 #endif // GRID_H

@@ -1,127 +1,197 @@
 #include "MainWindow.h"
-#include <gtkmm/label.h>
-#include <gtkmm/gestureclick.h>
 #include <gtkmm/box.h>
-#include <gtkmm/button.h> // Required for Gtk::Button
+#include <gtkmm/drawingarea.h>
+#include <gtkmm/gesturesingle.h> // For Gtk::GestureClick
+#include <gdkmm/rgba.h>
+#include <cairomm/context.h>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
+#include <algorithm> // For std::min
+#define _USE_MATH_DEFINES // For M_PI
+#include <cmath>     // For M_PI, std::abs
 #include <sigc++/sigc++.h> // For sigc::mem_fun
 
 MainWindow::MainWindow()
   : m_gameGrid(9, 9),
-    m_pathfinder(&m_gameGrid),
-    m_solver(&m_gameGrid),
+    m_pathfinder(&m_gameGrid), // Pass address of m_gameGrid
+    m_solver(&m_gameGrid),   // Pass address of m_gameGrid
     m_ballSelected(false),
     m_selectedRow(-1),
     m_selectedCol(-1),
     m_score(0),
     m_gameOver(false),
-    m_newGameButton("New Game") { // Initialize New Game button
+    m_newGameButton("New Game") {
     set_title("Color Lines GTK");
-    set_default_size(450, 600); // Adjusted size for button, score, game over
+    set_default_size(450, 600);
 
-    // Connect New Game button signal
-    m_newGameButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onNewGameClicked));
-    m_newGameButton.set_halign(Gtk::Align::CENTER);
-    m_newGameButton.set_margin_bottom(10);
-
-    m_scoreLabel.set_text("Score: 0");
-    m_scoreLabel.set_halign(Gtk::Align::CENTER);
-
-    m_gameOverLabel.set_text("");
-    m_gameOverLabel.set_halign(Gtk::Align::CENTER);
-
-    auto mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 5); // Reduced spacing
+    // Main vertical box
+    auto mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 10); // Increased spacing
     mainBox->set_margin(10);
-
-    mainBox->append(m_newGameButton); // Add New Game button at the top
-    mainBox->append(m_scoreLabel);
-    // m_scoreLabel.set_margin_bottom(5); // Already small spacing from mainBox
-
-    m_grid.set_expand(true);
-    m_grid.set_halign(Gtk::Align::CENTER);
-    m_grid.set_valign(Gtk::Align::CENTER);
-    mainBox->append(m_grid);
-
-    mainBox->append(m_gameOverLabel);
-    // m_gameOverLabel.set_margin_top(10); // Spacing from mainBox
-
     set_child(*mainBox);
 
-    // Initial game setup
-    onNewGameClicked(); // Call onNewGameClicked to setup the initial state (board, score, etc.)
-                        // This also calls drawBallsOnGrid and checkLinesAndScore.
+    // New Game Button
+    m_newGameButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onNewGameClicked));
+    m_newGameButton.set_halign(Gtk::Align::CENTER);
+    mainBox->append(m_newGameButton);
+
+    // Score Label
+    m_scoreLabel.set_text("Score: 0");
+    m_scoreLabel.set_halign(Gtk::Align::CENTER);
+    mainBox->append(m_scoreLabel);
+
+    // DrawingArea setup
+    m_drawingArea.set_expand(true);
+    m_drawingArea.set_halign(Gtk::Align::CENTER);
+    m_drawingArea.set_valign(Gtk::Align::CENTER);
+    m_drawingArea.set_size_request(360, 360);
+    mainBox->append(m_drawingArea);
+
+    m_drawingArea.set_draw_func(sigc::mem_fun(*this, &MainWindow::on_drawingArea_draw));
+
+    auto gesture = Gtk::GestureClick::create();
+    gesture->signal_pressed().connect(
+        [this](int n_press, double x, double y) {
+            double current_drawing_width = m_drawingArea.get_width();
+            double current_drawing_height = m_drawingArea.get_height();
+
+            if (m_gameGrid.getWidth() == 0 || m_gameGrid.getHeight() == 0) return;
+
+            double actual_grid_render_size = std::min(current_drawing_width, current_drawing_height);
+
+            double offset_x_click = (current_drawing_width - actual_grid_render_size) / 2.0;
+            double offset_y_click = (current_drawing_height - actual_grid_render_size) / 2.0;
+
+            double adjusted_x = x - offset_x_click;
+            double adjusted_y = y - offset_y_click;
+
+            double cell_width_double = actual_grid_render_size / m_gameGrid.getWidth();
+            double cell_height_double = actual_grid_render_size / m_gameGrid.getHeight();
+
+            if (cell_width_double <= 0 || cell_height_double <= 0) return;
+
+            int c = static_cast<int>(adjusted_x / cell_width_double);
+            int r = static_cast<int>(adjusted_y / cell_height_double);
+
+            if (r >= 0 && r < m_gameGrid.getHeight() && c >= 0 && c < m_gameGrid.getWidth() &&
+                adjusted_x >=0 && adjusted_x < actual_grid_render_size && // ensure click is within the centered grid box
+                adjusted_y >=0 && adjusted_y < actual_grid_render_size) {
+                this->onCellClicked(r, c);
+            }
+        }
+    );
+    m_drawingArea.add_controller(gesture);
+
+    // Game Over Label
+    m_gameOverLabel.set_text("");
+    m_gameOverLabel.set_halign(Gtk::Align::CENTER);
+    // Example of making it more prominent:
+    // Pango::FontDescription fd("Sans Bold 16");
+    // m_gameOverLabel.override_font(fd);
+    // Gdk::RGBA red("red");
+    // m_gameOverLabel.override_color(red);
+    mainBox->append(m_gameOverLabel);
+
+    onNewGameClicked(); // Start a new game
 }
 
 void MainWindow::onNewGameClicked() {
     std::cout << "New Game button clicked." << std::endl;
-    m_gameGrid.reset();
+    m_gameGrid.reset(); // Resets grid, clears balls
     m_score = 0;
     m_scoreLabel.set_text("Score: 0");
     m_gameOver = false;
     m_ballSelected = false;
     m_selectedRow = -1;
     m_selectedCol = -1;
-    m_gameOverLabel.set_text("");
+    m_gameOverLabel.set_text(""); // Clear game over message
 
     m_gameGrid.addRandomBalls(5); // Add initial balls for the new game
-    drawBallsOnGrid();
-    checkLinesAndScore(false); // Check if these initial balls formed any lines
+    drawBallsOnGrid(); // Redraw the grid with new balls
+
+    // Check if the newly added balls immediately form lines or if the game is over
+    checkLinesAndScore(false); // 'false' because no player move initiated this
 }
 
 
-void MainWindow::drawBallsOnGrid() {
-    while (Gtk::Widget* child = m_grid.get_first_child()) {
-        m_grid.remove(*child);
-    }
+void MainWindow::on_drawingArea_draw(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height) {
+    const Gdk::RGBA GRID_LINE_COLOR("black");
+    const Gdk::RGBA CELL_BG_COLOR("white");
+    const Gdk::RGBA SELECTED_CELL_HIGHLIGHT_COLOR("lightgray"); // For selected ball's cell
 
-    for (int r = 0; r < m_gameGrid.getHeight(); ++r) {
-        for (int c = 0; c < m_gameGrid.getWidth(); ++c) {
-            const Ball& ball = m_gameGrid.getBall(r, c);
-            auto label = Gtk::make_managed<Gtk::Label>(" ");
+    std::map<BallColor, Gdk::RGBA> BALL_COLORS;
+    BALL_COLORS[BallColor::RED] = Gdk::RGBA("red");
+    BALL_COLORS[BallColor::GREEN] = Gdk::RGBA("green");
+    BALL_COLORS[BallColor::BLUE] = Gdk::RGBA("blue");
+    BALL_COLORS[BallColor::YELLOW] = Gdk::RGBA("yellow");
+    BALL_COLORS[BallColor::PURPLE] = Gdk::RGBA("purple");
 
-            switch (ball.getColor()) {
-                case BallColor::RED:    label->set_text("R"); break;
-                case BallColor::GREEN:  label->set_text("G"); break;
-                case BallColor::BLUE:   label->set_text("B"); break;
-                case BallColor::YELLOW: label->set_text("Y"); break;
-                case BallColor::PURPLE: label->set_text("P"); break;
-                case BallColor::EMPTY:  label->set_text(" "); break;
-                default:                label->set_text("?"); break;
+    int num_rows = m_gameGrid.getHeight();
+    int num_cols = m_gameGrid.getWidth();
+    if (num_rows == 0 || num_cols == 0) return;
+
+    double actual_grid_render_size = std::min(static_cast<double>(width), static_cast<double>(height));
+    double cell_width = actual_grid_render_size / num_cols;
+    double cell_height = actual_grid_render_size / num_rows;
+
+    double offset_x = (width - actual_grid_render_size) / 2.0;
+    double offset_y = (height - actual_grid_render_size) / 2.0;
+
+    cr->save();
+    cr->translate(offset_x, offset_y);
+
+    for (int r = 0; r < num_rows; ++r) {
+        for (int c = 0; c < num_cols; ++c) {
+            double cell_x_pos = c * cell_width;
+            double cell_y_pos = r * cell_height;
+
+            // Highlight selected cell
+            if (m_ballSelected && r == m_selectedRow && c == m_selectedCol) {
+                Gdk::Cairo::set_source_rgba(cr, SELECTED_CELL_HIGHLIGHT_COLOR);
+            } else {
+                Gdk::Cairo::set_source_rgba(cr, CELL_BG_COLOR);
             }
+            cr->rectangle(cell_x_pos, cell_y_pos, cell_width, cell_height);
+            cr->fill_preserve();
 
-            label->set_expand(true);
-            label->set_halign(Gtk::Align::FILL);
-            label->set_valign(Gtk::Align::FILL);
-            label->set_vexpand(true);
-            label->set_hexpand(true);
-            label->set_size_request(30, 30);
+            Gdk::Cairo::set_source_rgba(cr, GRID_LINE_COLOR);
+            cr->set_line_width(1.0);
+            cr->stroke();
 
-            auto gesture = Gtk::GestureClick::create();
-            gesture->signal_pressed().connect(
-                [this, r, c](int n_press, double x, double y) {
-                    this->onCellClicked(r, c);
+            const Ball& ball = m_gameGrid.getBall(r, c);
+            if (ball.getColor() != BallColor::EMPTY) {
+                auto it = BALL_COLORS.find(ball.getColor());
+                if (it != BALL_COLORS.end()) {
+                    Gdk::Cairo::set_source_rgba(cr, it->second);
+                    double ball_radius = std::min(cell_width, cell_height) / 2.8;
+                    cr->arc(cell_x_pos + cell_width / 2.0, cell_y_pos + cell_height / 2.0, ball_radius, 0.0, 2.0 * M_PI);
+                    cr->fill();
                 }
-            );
-            label->add_controller(gesture);
-            m_grid.attach(*label, c, r);
+            }
         }
     }
-    m_grid.set_row_spacing(5);
-    m_grid.set_column_spacing(5);
+    cr->restore();
+}
+
+void MainWindow::drawBallsOnGrid() {
+    if (m_drawingArea.get_widget() && m_drawingArea.get_realized()) { // Check if widget is realized
+        m_drawingArea.queue_draw();
+    }
 }
 
 void MainWindow::onCellClicked(int r, int c) {
     if (m_gameOver) {
         std::cout << "Game is over. No more moves. Click 'New Game'." << std::endl;
-        return;
+        return; // Don't allow moves if game is over
     }
 
     std::cout << "Cell clicked: (" << r << ", " << c << ")" << std::endl;
 
     if (m_ballSelected) {
+        // A ball is already selected, try to move it
         if (m_gameGrid.isCellEmpty(r, c)) {
+            // Clicked on an empty cell, attempt to move
             std::cout << "Attempting to move from (" << m_selectedRow << ", " << m_selectedCol << ") to (" << r << ", " << c << ")" << std::endl;
             if (m_pathfinder.canReach(m_selectedRow, m_selectedCol, r, c)) {
                 std::cout << "Path found!" << std::endl;
@@ -129,52 +199,51 @@ void MainWindow::onCellClicked(int r, int c) {
                 m_gameGrid.removeBall(m_selectedRow, m_selectedCol);
                 m_gameGrid.placeBall(r, c, color);
 
-                m_ballSelected = false;
-                checkLinesAndScore(true);
+                m_ballSelected = false; // Deselect after moving
+                checkLinesAndScore(true); // Balls moved, check for lines, add new balls if no lines
             } else {
                 std::cout << "Invalid move: No path." << std::endl;
+                // Keep ball selected or deselect? Game rules vary. Let's deselect for simplicity.
                 m_ballSelected = false;
-                 // Redraw to ensure any selection highlight is removed (if implemented later)
-                // drawBallsOnGrid();
             }
         } else {
-            std::cout << "Clicked on another ball at (" << r << ", " << c << ")" << std::endl;
+            // Clicked on another ball
+             std::cout << "Clicked on another ball at (" << r << ", " << c << ")" << std::endl;
             if (m_selectedRow == r && m_selectedCol == c) {
+                 // Clicked on the already selected ball - deselect it
                  std::cout << "Deselected ball at (" << r << ", " << c << ")" << std::endl;
                  m_ballSelected = false;
             } else {
+                // Selected a different ball
                 m_selectedRow = r;
                 m_selectedCol = c;
-                m_ballSelected = true;
+                // m_ballSelected remains true
                 std::cout << "Switched selection to new ball at (" << r << ", " << c << ")" << std::endl;
             }
-            // Redraw to show new selection highlight (if implemented later)
-            // drawBallsOnGrid();
         }
     } else {
+        // No ball selected yet, try to select this one
         if (!m_gameGrid.isCellEmpty(r, c)) {
             m_selectedRow = r;
             m_selectedCol = c;
             m_ballSelected = true;
             std::cout << "Selected ball at (" << r << ", " << c << ")" << std::endl;
-            // Redraw to show selection highlight (if implemented later)
-            // drawBallsOnGrid();
         } else {
             std::cout << "Clicked on empty cell (" << r << ", " << c << "), no ball selected." << std::endl;
         }
     }
+    drawBallsOnGrid(); // Redraw to reflect selection changes or moves
 }
 
 int MainWindow::calculateScore(int ballsInLine) {
     if (ballsInLine < 5) return 0;
-    return ballsInLine * 10 + (ballsInLine > 5 ? (ballsInLine - 5) * 10 : 0);
+    // Example: 5 balls = 10, 6 = 10+12=22, 7 = 22+14=36 etc. (base 10, +2 for each extra ball)
+    // A simpler scoring: 10 points for 5 balls, 5 more for each additional ball
+    return 10 + (ballsInLine - 5) * 5;
 }
 
-void MainWindow::checkLinesAndScore(bool ballsMoved) {
-    if(m_gameOver && ballsMoved) { // if game was already over, but this is a check after a successful move (should not happen if onCellClicked checks m_gameOver)
-         std::cout << "checkLinesAndScore called while game already over. Aborting." << std::endl;
-        return;
-    }
+void MainWindow::checkLinesAndScore(bool ballsMovedAndNoLinesFormedByPlayer) {
+    if (m_gameOver) return; // Don't process if already game over
 
     std::vector<std::pair<int, int>> lines = m_solver.findLines();
 
@@ -186,59 +255,53 @@ void MainWindow::checkLinesAndScore(bool ballsMoved) {
         m_score += calculateScore(lines.size());
         m_scoreLabel.set_text("Score: " + std::to_string(m_score));
 
-        drawBallsOnGrid();
-
-        std::cout << "Player cleared lines. Gets another turn." << std::endl;
-        if (m_gameGrid.isFull()) { // Unlikely, but possible if clearing lines makes it "full" (e.g. no valid moves left, though isFull just means no empty cells)
+        // Player cleared lines, does not add new balls this turn.
+        // The board might be full now, check for game over.
+        if (m_gameGrid.isFull()) {
              m_gameOver = true;
-             m_gameOverLabel.set_text("Game Over! (Grid full after line clear)");
+             m_gameOverLabel.set_markup("<span size='large' weight='bold' foreground='red'>Game Over! Grid Full!</span>");
              std::cout << "Game Over! Grid became full after clearing lines." << std::endl;
         }
     } else {
-        if (ballsMoved) {
-            std::cout << "Move successful, no lines formed. Adding new balls." << std::endl;
-            std::vector<std::pair<int, int>> newBalls = m_gameGrid.addRandomBalls(3);
-            // It's important to draw the grid *after* new balls are added.
-            // And then check if these new balls formed lines.
+        // No lines were formed by the player's move OR this is an initial check.
+        if (ballsMovedAndNoLinesFormedByPlayer) {
+            // Player moved a ball, but it didn't form a line. Add new balls.
+            std::cout << "Move successful, no lines formed by player. Adding new balls." << std::endl;
+            std::vector<std::pair<int, int>> newBallsPositions = m_gameGrid.addRandomBalls(3);
 
-            if (newBalls.empty() && m_gameGrid.isFull()) {
-                 drawBallsOnGrid(); // Show the grid in its final state
+            if (newBallsPositions.empty() && m_gameGrid.isFull()) {
+                 // No space for new balls and grid is full. Game Over.
                  m_gameOver = true;
-                 m_gameOverLabel.set_text("Game Over! (No space for new balls)");
+                 m_gameOverLabel.set_markup("<span size='large' weight='bold' foreground='red'>Game Over! No Space!</span>");
                  std::cout << "Game Over! No space to add new balls and grid is full." << std::endl;
-                 return;
-            }
+            } else {
+                // New balls were added (or there was space). Check if THEY formed lines.
+                std::vector<std::pair<int, int>> newLinesFromAddedBalls = m_solver.findLines();
+                if (!newLinesFromAddedBalls.empty()) {
+                    std::cout << "Newly added balls formed lines! Balls to remove: " << newLinesFromAddedBalls.size() << std::endl;
+                    for (const auto& pos : newLinesFromAddedBalls) {
+                        m_gameGrid.removeBall(pos.first, pos.second);
+                    }
+                    // Score for these? Some games do, some don't. Let's not add to score for this.
+                    // m_score += calculateScore(newLinesFromAddedBalls.size());
+                    // m_scoreLabel.set_text("Score: " + std::to_string(m_score));
+                    std::cout << "Lines formed by new balls cleared." << std::endl;
 
-            // Redraw to show newly added balls FIRST.
-            drawBallsOnGrid();
-
-            std::vector<std::pair<int, int>> newLines = m_solver.findLines();
-            if (!newLines.empty()) {
-                std::cout << "Newly added balls formed lines! Balls to remove: " << newLines.size() << std::endl;
-                for (const auto& pos : newLines) {
-                    m_gameGrid.removeBall(pos.first, pos.second);
+                    if (m_gameGrid.isFull()) { // Check again after auto-clear
+                         m_gameOver = true;
+                         m_gameOverLabel.set_markup("<span size='large' weight='bold' foreground='red'>Game Over! Grid Full!</span>");
+                         std::cout << "Game Over! Grid is full after adding balls and auto-clearing." << std::endl;
+                    }
                 }
-                // Score for these? Typically not, or it's a smaller bonus. For now, no score.
-                // m_score += calculateScore(newLines.size());
-                // m_scoreLabel.set_text("Score: " + std::to_string(m_score));
-
-                drawBallsOnGrid();
-                std::cout << "Lines formed by new balls cleared." << std::endl;
             }
-
-            if (m_gameGrid.isFull()) { // Check again after potential auto-clear
-                 m_gameOver = true;
-                 m_gameOverLabel.set_text("Game Over! (Grid full after adding balls)");
-                 std::cout << "Game Over! Grid is full after adding new balls and auto-clearing." << std::endl;
-            }
-        } else { // No lines found, and no balls were moved by player (e.g. initial check from New Game)
-            std::cout << "No lines formed from initial ball placement." << std::endl;
-            // drawBallsOnGrid(); // Already called by onNewGameClicked before this
-            if (m_gameGrid.isFull()) { // Check if grid is full from initial placement
-                 m_gameOver = true;
-                 m_gameOverLabel.set_text("Game Over! (Grid full on start)");
-                 std::cout << "Game Over! Grid is full on initial check." << std::endl;
-            }
+        } else if (!ballsMovedAndNoLinesFormedByPlayer && m_gameGrid.isFull()) {
+            // This case is for initial setup (onNewGameClicked calls with false)
+            // If grid is full immediately after adding first balls and no lines formed.
+            m_gameOver = true;
+            m_gameOverLabel.set_markup("<span size='large' weight='bold' foreground='red'>Game Over! Grid Full on Start!</span>");
+            std::cout << "Game Over! Grid is full on initial ball placement and no lines." << std::endl;
         }
     }
+    // Always redraw at the end of a turn or check.
+    drawBallsOnGrid();
 }

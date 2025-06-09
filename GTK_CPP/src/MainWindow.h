@@ -2,7 +2,8 @@
 #define MAINWINDOW_H
 
 #include <gtkmm/applicationwindow.h>
-#include <gtkmm/grid.h>
+// #include <gtkmm/grid.h> // Replaced by DrawingArea
+#include <gtkmm/drawingarea.h> // Added
 #include <gtkmm/label.h>
 #include <gtkmm/button.h> // For Gtk::Button
 #include "GameGrid.h"
@@ -14,14 +15,18 @@ public:
     MainWindow();
 
 private:
-    void drawBallsOnGrid();
+    void drawBallsOnGrid(); // Will now just call m_drawingArea.queue_draw()
     void onCellClicked(int r, int c);
     void checkLinesAndScore(bool ballsMoved);
     int calculateScore(int ballsInLine);
     void onNewGameClicked(); // Handler for New Game button
 
+    // Drawing handler for the game board
+    void on_drawingArea_draw(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height);
+
 protected:
-    Gtk::Grid m_grid;      // The game board grid
+    // Gtk::Grid m_grid;      // Replaced by m_drawingArea
+    Gtk::DrawingArea m_drawingArea; // Used for custom drawing the game board
     GameGrid m_gameGrid;   // The logical game grid
     Pathfinder m_pathfinder;
     Solver m_solver;

@@ -1,0 +1,79 @@
+/* Basic styling for Connect Four */
+
+/* Style for the game window */
+window {
+    background-color: #e0e0e0; /* Lighter grey background for the window */
+    font-family: sans-serif;
+}
+
+/* Frame around the drawing area */
+frame {
+    border: 1px solid #a0a0a0;
+    border-radius: 5px;
+    padding: 5px;
+    background-color: #d0d0d0; /* Slightly darker grey for frame */
+}
+
+frame label { /* Style the label of the frame if needed */
+    font-weight: bold;
+    color: #333;
+}
+
+/* Style for the game grid (drawing area) */
+drawingarea {
+    background-color: #003366; /* Dark blue for the board */
+    border-radius: 8px; /* Rounded corners for the board */
+    /* Add some padding inside the drawing area if cells are drawn from edge to edge */
+}
+
+/* Style for column selection buttons */
+button {
+    font-size: 14px;
+    border-radius: 5px;
+    padding: 8px 12px; /* Vertical and horizontal padding */
+    background-image: none; /* Ensure GTK theme doesn't override too much */
+    background-color: #f0f0f0; /* Default button color */
+    border: 1px solid #c0c0c0;
+    color: #333;
+    min-width: 100px; /* Ensure buttons have a decent width */
+}
+
+button:hover {
+    background-color: #dcdcdc; /* Lighter grey on hover */
+    border-color: #b0b0b0;
+}
+
+button:disabled {
+    background-color: #bdbdbd;
+    color: #757575;
+    border-color: #a0a0a0;
+}
+
+/* Style for the status label */
+.status-label { /* Target by class */
+    font-size: 18px;
+    font-weight: bold;
+    padding: 10px;
+    color: #2c3e50; /* Darker text color for status */
+    text-align: center; /* Gtk.Label text alignment might need programmatic setting */
+}
+
+/* Style for the restart button */
+.restart-button { /* Target by class, or use #restart_button if set_name is preferred */
+    background-color: #27ae60; /* Green for restart */
+    color: white;
+    font-size: 15px;
+    padding: 10px 15px;
+    border: 1px solid #1e8449;
+}
+
+.restart-button:hover {
+    background-color: #2ecc71; /* Lighter green on hover */
+}
+
+/* Specific styles for player tokens (colors are set in on_draw, but you could define classes) */
+/* .player-R-token { fill: #FF0000; } */
+/* .player-Y-token { fill: #FFFF00; } */
+
+/* Style for empty slots (color is set in on_draw, but can be influenced via CSS if drawn differently) */
+/* .empty-slot { fill: #BDC3C7; } */

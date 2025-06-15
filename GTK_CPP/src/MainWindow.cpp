@@ -2,7 +2,9 @@
 #include <gtkmm/box.h>
 #include <gtkmm/drawingarea.h>
 #include <gtkmm/gesturesingle.h> // For Gtk::GestureClick
+#include <gtkmm/gestureclick.h> // Added
 #include <gdkmm/rgba.h>
+#include <gdkmm/cairo.h> // Added
 #include <cairomm/context.h>
 #include <iostream>
 #include <string>
@@ -175,7 +177,7 @@ void MainWindow::on_drawingArea_draw(const Cairo::RefPtr<Cairo::Context>& cr, in
 }
 
 void MainWindow::drawBallsOnGrid() {
-    if (m_drawingArea.get_widget() && m_drawingArea.get_realized()) { // Check if widget is realized
+    if (m_drawingArea.get_realized()) { // Check if widget is realized
         m_drawingArea.queue_draw();
     }
 }
